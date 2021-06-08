@@ -22,7 +22,7 @@ Activity & event types:
 # this avoids different pylint behaviour for python 2 and 3
 from __future__ import print_function
 
-from datetime import datetime, timedelta, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 from getpass import getpass
 from math import floor
 from platform import python_version
@@ -518,6 +518,10 @@ def parse_arguments(argv):
     parser.add_argument('-ex', '--exclude', metavar="FILE",
         help="Json file with Array of activity IDs to exclude from download. "
                         "Format example: {\"ids\": [\"6176888711\"]}")
+    parser.add_argument('--stats', choices=['week', 'month', 'year'], default=None,
+        help="do not download anything, rather fetch some stats only (currently display either current weekly, monthly, or yearly milage).")
+    parser.add_argument('-at', '--activitytype', choices=['running', 'cycling', 'swimming', 'fitness_equipment', 'hiking', 'walking', 'other'], default=None,
+        help="specify the activity type (default any activity).")
 
     return parser.parse_args(argv[1:])
 
@@ -917,6 +921,7 @@ def fetch_userstats(destination_dir):
     print('Fetching user stats...', end='')
     logging.info('Userstats page %s', URL_GC_USERSTATS + display_name)
     result = http_req_as_string(URL_GC_USERSTATS + display_name)
+    logging.info('Userstats data: {}'.format(result))
     print(' Done.')
 
     # Persist JSON
@@ -925,7 +930,7 @@ def fetch_userstats(destination_dir):
     return json.loads(result)
 
 
-def fetch_activity_list(destination_dir, total_to_download):
+def fetch_activity_list(destination_dir, total_to_download, activitytype, stats):
     """
     Fetch the first 'total_to_download' activity summaries; as a side effect save them in json format.
     :param destination_dir:   directory where the json files will be stored
@@ -946,7 +951,7 @@ def fetch_activity_list(destination_dir, total_to_download):
         else:
             num_to_download = total_to_download - total_downloaded
 
-        chunk = fetch_activity_chunk(destination_dir, num_to_download, total_downloaded)
+        chunk = fetch_activity_chunk(destination_dir, num_to_download, total_downloaded, activitytype, stats)
         activities.extend(chunk)
         total_downloaded += num_to_download
 
@@ -971,7 +976,7 @@ def annotate_activity_list(activities, start, exclude_list):
     return action_list
 
 
-def fetch_activity_chunk(destination_dir, num_to_download, total_downloaded):
+def fetch_activity_chunk(destination_dir, num_to_download, total_downloaded, activitytype, stats):
     """
     Fetch a chunk of activity summaries; as a side effect save them in json format.
     :param destination_dir:   directory where the json files will be stored
@@ -981,6 +986,29 @@ def fetch_activity_chunk(destination_dir, num_to_download, total_downloaded):
     """
 
     search_params = {'start': total_downloaded, 'limit': num_to_download}
+    #    https://connect.garmin.com/modern/activities?activityType=running&startDate=2021-05-31&endDate=2021-06-6
+    #Today: 2021-06-08
+    #Start: 2021-06-07 -> week
+
+    today = date.today()
+    if None == activitytype:
+        activitytype = 'running'
+    if stats == 'week':
+        start = today - timedelta(days=today.weekday())
+        print("get weekly {} stats, starting from {}".format(activitytype, start))
+        search_params = {'activityType': activitytype, 'startDate': str(start)}
+
+    if stats == 'month':
+        start = today.strftime('%Y-%m-01')
+        print("get monthly {} stats, starting from {}".format(activitytype, start))
+        search_params = {'activityType': activitytype, 'startDate': str(start)}
+
+    if stats == 'year':
+        start = today.strftime('%Y-01-01')
+        print("get year-to-date {} stats, starting from {}".format(activitytype, start))
+        search_params = {'activityType': activitytype, 'startDate': str(start)}
+
+
     # Query Garmin Connect
     print('Querying list of activities ', total_downloaded + 1,
           '..', total_downloaded + num_to_download,
@@ -1146,8 +1174,10 @@ def main(argv):
     # write_to_file(args.directory + '/event_types.properties', event_type_props, 'w')
     event_type_name = load_properties(event_type_props)
 
-    activities = fetch_activity_list(args.directory, total_to_download)
+    activities = fetch_activity_list(args.directory, total_to_download, args.activitytype, args.stats)
     action_list = annotate_activity_list(activities, args.start_activity_no, exclude_list)
+    total_dist = 0
+    total_minutes = 0
 
     # Process each activity.
     for item in action_list:
@@ -1194,8 +1224,10 @@ def main(argv):
 
         print('\t', extract['start_time_with_offset'].isoformat(), ', ', sep='', end='')
         print(hhmmss_from_seconds(extract['elapsed_seconds']), ', ', sep='', end='')
+        total_minutes += extract['elapsed_seconds'] / 60
         if 'distance' in actvty and isinstance(actvty['distance'], (float)):
             print("{0:.3f}".format(actvty['distance'] / 1000), 'km', sep='')
+            total_dist += actvty['distance'] / 1000
         else:
             print('0.000 km')
 
@@ -1239,6 +1271,10 @@ def main(argv):
                          actvty['startTimeLocal'])
 
     # End for loop for activities / action items
+
+    if args.stats:
+        print("Total distance per {0}: {1:.2f} km".format(args.stats, total_dist))
+        print("Total duration per {0}: {1:.0f} minutes".format(args.stats, total_minutes))
 
     csv_file.close()
 
