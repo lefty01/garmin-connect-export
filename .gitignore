@@ -2,9 +2,12 @@
 __pycache__/
 .idea/
 .DS_Store
+build/
 extras/
 venv/
+garmin_connect_export.egg-info/
 *_garmin_connect_export/
 *.pyc
 *.log
 lint*.txt
+*~
