@@ -74,6 +74,8 @@ optional arguments:
                         the subdirectory for activity files (tcx, gpx etc.), supported placeholders are {YYYY} and {MM} (default:
                         export directory)
   -u, --unzip           if downloading ZIP files (format: 'original'), unzip the file and remove the ZIP file
+  -t [TYPE], --activity-type [TYPE]
+                        filter by activity type ('running', 'cycling', 'swimming', 'walking', 'hiking') (default: 'all')
   -ot, --originaltime   will set downloaded (and possibly unzipped) file time to the activity start time
   --desc [DESC]         append the activity's description to the file name of the download; limit size if number is given
   -t TEMPLATE, --template TEMPLATE

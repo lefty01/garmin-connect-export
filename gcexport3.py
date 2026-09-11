@@ -1,4 +1,4 @@
-#!/usr/bin/python3.13
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 """File: gcexport.py.
@@ -108,6 +108,15 @@ PARSER.add_argument(
     action="store_true",
 )
 
+PARSER.add_argument(
+    "-t",
+    "--activity-type",
+    nargs="?",
+    default="all",
+    choices=["all", "running", "cycling", "swimming", "walking", "hiking"],
+    help="filter by activity type (default: 'all')",
+)
+
 ARGS = PARSER.parse_args()
 
 if ARGS.version:
@@ -165,7 +174,7 @@ def http_req(url, post=None, headers=None):
     # Tell Garmin we're some supported browser.
     request.add_header(
         "User-Agent",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     )
     request.add_header(
         "nk",
@@ -376,6 +385,12 @@ with Path(CSV_FILENAME).open("a") as CSV_FILE:
             print("Garmin Connect activity: [" + str(a["activityId"]) + "]", end=" ")
             print(a["activityName"])
             # print("\t" + a["uploadDate"]["display"] + ",", end=" ")
+
+            # Activity type filtering
+            if ARGS.activity_type != "all" and a["activityType"]["typeKey"] != ARGS.activity_type:
+                print("\tSkipping activity (type: " + a["activityType"]["typeKey"] + ")...")
+                continue
+
             if ARGS.format == "gpx":
                 data_filename = (
                     ARGS.directory + "/" + str(a["activityId"]) + "_activity.gpx"
@@ -765,11 +780,9 @@ with Path(CSV_FILENAME).open("a") as CSV_FILE:
                     print("Unzipping and removing original files...", end=" ")
                     print("Filesize is: " + str(Path(data_filename).stat().st_size))
                     if Path(data_filename).stat().st_size > 0:
-                        with Path(data_filename).open("rb") as zip_file:
-                            z = zipfile.ZipFile(zip_file)
-                        for name in z.namelist():
-                            z.extract(name, ARGS.directory)
-                        zip_file.close()
+                        with zipfile.ZipFile(data_filename, 'r') as z:
+                            for name in z.namelist():
+                                z.extract(name, ARGS.directory)
                     else:
                         print("Skipping 0Kb zip file.")
                     Path(data_filename).unlink()
